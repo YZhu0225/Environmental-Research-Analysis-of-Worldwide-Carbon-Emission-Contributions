@@ -1,0 +1,14 @@
+---
+title: "IDS 702: Final Project Proposal"
+output: pdf_document
+---
+
+Group Members: Susanna Anil, Sukhpreet Sahota, Xianchi Zhang, Yuanjing Zhu
+
+# Chosen Dataset
+
+# Proposed Research Questions
+- Does the presence of major corporations in a country affect carbon emission rates?
+- To what extent is carbon emissions impacted by the size of the corporation? (continuous)
+- Given three income brackets (top 10%, middle, and bottom 50%), which group contributes the most to carbon emissions?
+

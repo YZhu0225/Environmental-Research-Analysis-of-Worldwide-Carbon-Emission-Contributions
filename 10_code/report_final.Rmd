@@ -1,0 +1,1048 @@
+---
+title: "Environmental Research Report"
+author: "Suzy Anil, Sukhpreet Sahota, Xianchi Zhang, Yuanjing Zhu"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  word_document: default
+  html_document:
+    df_print: paged
+subtitle: 'Analysis of Worldwide Carbon Emission Contributions'
+---
+
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r, echo = FALSE, message = FALSE, results = 'hide'}
+# import libraries
+# install.packages('readxl')
+# install.packages('dplyr')
+# install.packages('tidyverse')
+# install.packages('knitr')
+# install.packages('ggplot2')
+# install.packages('cowplot')
+# install.packages('corrplot')
+# install.packages('stargazer')
+# install.packages('xfun')
+# install.packages('lme4')
+# install.packages('ordinal')
+# install.packages('brant')
+# install.packages('car')
+# install.packages('ROCR')
+# install.packages('MuMIn')
+# install.packages('caret')
+# install.packages('pROC')
+# install.packages('patchwork')
+# install.packages('kableExtra')
+library(caret)
+library(MuMIn)
+library(ROCR)
+library(car)
+library(brant)
+library(ordinal)
+library(lme4)
+library(stargazer)
+library(corrplot)
+library(cowplot)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(knitr)
+library(ggplot2)
+library(gridExtra)
+library(MASS)
+library(kableExtra)
+library(tidyr)
+library(broom)
+library(plotly)
+library(pROC)
+```
+
+
+```{r, echo = FALSE, message = FALSE, results = 'hide', fig.align='center'}
+# 1. Clean national income, gdp, and CO2 data - Drop any columns/country with missing values > remove them from all indicators
+# Load data
+inc_gdp_co2 <- read_excel('WID_Data_20102022-225315_National Income, GDP, CO2.xlsx', sheet = "Data")
+#dim(inc_gdp_co2)
+
+## Delete columns with missing values
+inc_gdp_co2_2 <- inc_gdp_co2 %>%
+  select_if(~ !any(is.na(.)))
+#dim(inc_gdp_co2_2)
+# here we eliminate 22 countries
+
+## select 10 countries
+year <- inc_gdp_co2_2[, "Year"]
+United_States <- inc_gdp_co2_2[, grep(pattern=".USA", names(inc_gdp_co2_2), value = TRUE)]
+China <- inc_gdp_co2_2[, grep(pattern=".China", names(inc_gdp_co2_2), value = TRUE)]
+India <- inc_gdp_co2_2[, grep(pattern=".India", names(inc_gdp_co2_2), value = TRUE)]
+Germany <- inc_gdp_co2_2[, grep(pattern=".Germany", names(inc_gdp_co2_2), value = TRUE)]
+United_Kingdom <- inc_gdp_co2_2[, grep(pattern=".United Kingdom", names(inc_gdp_co2_2), value = TRUE)]
+Canada <- inc_gdp_co2_2[, grep(pattern=".Canada", names(inc_gdp_co2_2), value = TRUE)]
+Australia <- inc_gdp_co2_2[, grep(pattern=".Australia", names(inc_gdp_co2_2), value = TRUE)][, c(3, 6, 9)]
+Brazil <- inc_gdp_co2_2[, grep(pattern=".Brazil", names(inc_gdp_co2_2), value = TRUE)]
+Nigeria <- inc_gdp_co2_2[, grep(pattern=".Nigeria", names(inc_gdp_co2_2), value = TRUE)]
+South_Africa <- inc_gdp_co2_2[, grep(pattern=".South Africa", names(inc_gdp_co2_2), value = TRUE)][, c(2, 4, 6)]
+
+# combine these columns
+ten_countries <- cbind(year, United_States, China, India, Germany, United_Kingdom, Canada, Australia, Brazil, Nigeria, South_Africa)
+# rename the column (make it shorter...)
+# rename the column (make it shorter...)
+colnames(ten_countries) <- c("year", "National_income_USA" , "GDP_USA", "CO2_USA"
+                             , "National_income_China" , "GDP_China", "CO2_China"
+                             , "National_income_India" , "GDP_India", "CO2_India"
+                             , "National_income_Germany" , "GDP_Germany", "CO2_Germany"
+                             , "National_income_United_Kingdom" , "GDP_United_Kingdom", "CO2_United_Kingdom"
+                             , "National_income_Canada" , "GDP_Canada", "CO2_Canada"
+                             , "National_income_Australia" , "GDP_Australia", "CO2_Australia"
+                             , "National_income_Brazil" , "GDP_Brazil", "CO2_Brazil"
+                             , "National_income_Nigeria" , "GDP_Nigeria", "CO2_Nigeria"
+                             , "National_income_South_Africa" , "GDP_South_Africa", "CO2_South_Africa")
+
+```
+
+```{r, echo=FALSE}
+# 2a. Clean income bracket data for top 10 percent - remove data for all countries not within the selected set of 10 countries
+income_bracket_top_10 <- read_excel('WID_Data_20102022-234201_Income Bracket-Top 10 Percent.xlsx', sheet = "Data")
+income_bracket_top_10_percentile <- income_bracket_top_10[, "Percentile"]
+income_bracket_top_10_year <- income_bracket_top_10[, "Year"]
+United_States_income_bracket_10 <- income_bracket_top_10[, grep(pattern=".USA", names(income_bracket_top_10), value = TRUE)]
+China_income_bracket_10 <- income_bracket_top_10[, grep(pattern=".China", names(income_bracket_top_10), value = TRUE)][, c(1)]
+India_income_bracket_10 <- income_bracket_top_10[, grep(pattern=".India", names(income_bracket_top_10), value = TRUE)][, c(2)]
+Germany_income_bracket_10 <- income_bracket_top_10[, grep(pattern=".Germany", names(income_bracket_top_10), value = TRUE)]
+United_Kingdom_income_bracket_10 <- income_bracket_top_10[, grep(pattern=".United Kingdom", names(income_bracket_top_10), value = TRUE)]
+Canada_income_bracket_10 <- income_bracket_top_10[, grep(pattern=".Canada", names(income_bracket_top_10), value = TRUE)]
+Australia_income_bracket_10 <- income_bracket_top_10[, grep(pattern=".Australia", names(income_bracket_top_10), value = TRUE)]
+Brazil_income_bracket_10 <- income_bracket_top_10[, grep(pattern=".Brazil", names(income_bracket_top_10), value = TRUE)]
+Nigeria_income_bracket_10 <- income_bracket_top_10[, grep(pattern=".Nigeria", names(income_bracket_top_10), value = TRUE)]
+South_Africa_income_bracket_10 <- income_bracket_top_10[, grep(pattern=".South Africa", names(income_bracket_top_10), value = TRUE)][, c(2)]
+
+## Delete columns with missing values
+income_bracket_top_10_ten_countries <- cbind(income_bracket_top_10_percentile, income_bracket_top_10_year, United_States_income_bracket_10, China_income_bracket_10, India_income_bracket_10, Germany_income_bracket_10, United_Kingdom_income_bracket_10, Canada_income_bracket_10, Australia_income_bracket_10, Brazil_income_bracket_10, Nigeria_income_bracket_10, South_Africa_income_bracket_10)
+
+
+###################
+# 2b. Clean income bracket data for mid 40 percent - remove data for all countries not within the selected set of 10 countries
+income_bracket_mid_40 <- read_excel('WID_Data_20102022-234632_Income Bracket-Mid 40 Percent.xlsx', sheet = "Data")
+income_bracket_mid_40_percentile <- income_bracket_mid_40[, "Percentile"]
+income_bracket_mid_40_year <- income_bracket_mid_40[, "Year"]
+United_States_income_bracket_40 <- income_bracket_mid_40[, grep(pattern=".USA", names(income_bracket_mid_40), value = TRUE)]
+China_income_bracket_40 <- income_bracket_mid_40[, grep(pattern=".China", names(income_bracket_mid_40), value = TRUE)][, c(1)]
+India_income_bracket_40 <- income_bracket_mid_40[, grep(pattern=".India", names(income_bracket_mid_40), value = TRUE)]
+Germany_income_bracket_40 <- income_bracket_mid_40[, grep(pattern=".Germany", names(income_bracket_mid_40), value = TRUE)]
+United_Kingdom_income_bracket_40 <- income_bracket_mid_40[, grep(pattern=".United Kingdom", names(income_bracket_mid_40), value = TRUE)]
+Canada_income_bracket_40 <- income_bracket_mid_40[, grep(pattern=".Canada", names(income_bracket_mid_40), value = TRUE)]
+Australia_income_bracket_40 <- income_bracket_mid_40[, grep(pattern=".Australia", names(income_bracket_mid_40), value = TRUE)]
+Brazil_income_bracket_40 <- income_bracket_mid_40[, grep(pattern=".Brazil", names(income_bracket_mid_40), value = TRUE)]
+Nigeria_income_bracket_40 <- income_bracket_mid_40[, grep(pattern=".Nigeria", names(income_bracket_mid_40), value = TRUE)]
+South_Africa_income_bracket_40 <- income_bracket_mid_40[, grep(pattern=".South Africa", names(income_bracket_mid_40), value = TRUE)][, c(2)]
+
+## Delete columns with missing values
+income_bracket_mid_40_ten_countries <- cbind(income_bracket_mid_40_percentile, income_bracket_mid_40_year, United_States_income_bracket_40, China_income_bracket_40, India_income_bracket_40, Germany_income_bracket_40, United_Kingdom_income_bracket_40, Canada_income_bracket_40, Australia_income_bracket_40, Brazil_income_bracket_40, Nigeria_income_bracket_40, South_Africa_income_bracket_40)
+
+
+###################
+# 2c. Clean income bracket data for bottom 50 percent - remove data for all countries not within the selected set of 10 countries
+income_bracket_bottom_50 <- read_excel('WID_Data_20102022-234329_Income Bracket-Bottom 50 Percent.xlsx', sheet = "Data")
+income_bracket_bottom_50_percentile <- income_bracket_bottom_50[, "Percentile"]
+income_bracket_bottom_50_year <- income_bracket_bottom_50[, "Year"]
+United_States_income_bracket_50 <- income_bracket_bottom_50[, grep(pattern=".USA", names(income_bracket_bottom_50), value = TRUE)]
+China_income_bracket_50 <- income_bracket_bottom_50[, grep(pattern=".China", names(income_bracket_bottom_50), value = TRUE)][, c(1)]
+India_income_bracket_50 <- income_bracket_bottom_50[, grep(pattern=".India", names(income_bracket_bottom_50), value = TRUE)]
+Germany_income_bracket_50 <- income_bracket_bottom_50[, grep(pattern=".Germany", names(income_bracket_bottom_50), value = TRUE)]
+United_Kingdom_income_bracket_50 <- income_bracket_bottom_50[, grep(pattern=".United Kingdom", names(income_bracket_bottom_50), value = TRUE)]
+Canada_income_bracket_50 <- income_bracket_bottom_50[, grep(pattern=".Canada", names(income_bracket_bottom_50), value = TRUE)]
+Australia_income_bracket_50 <- income_bracket_bottom_50[, grep(pattern=".Australia", names(income_bracket_bottom_50), value = TRUE)]
+Brazil_income_bracket_50 <- income_bracket_bottom_50[, grep(pattern=".Brazil", names(income_bracket_bottom_50), value = TRUE)]
+Nigeria_income_bracket_50 <- income_bracket_bottom_50[, grep(pattern=".Nigeria", names(income_bracket_bottom_50), value = TRUE)]
+South_Africa_income_bracket_50 <- income_bracket_bottom_50[, grep(pattern=".South Africa", names(income_bracket_bottom_50), value = TRUE)][, c(2)]
+
+## Delete columns with missing values
+income_bracket_bottom_50_ten_countries <- cbind(income_bracket_bottom_50_percentile, income_bracket_bottom_50_year, United_States_income_bracket_50, China_income_bracket_50, India_income_bracket_50, Germany_income_bracket_50, United_Kingdom_income_bracket_50, Canada_income_bracket_50, Australia_income_bracket_50, Brazil_income_bracket_50, Nigeria_income_bracket_50, South_Africa_income_bracket_50)
+
+
+###################
+# 2d. Combine Top 10, Mid 40, Bottom 50 tables
+income_bracket_all_ten_countries <- cbind(income_bracket_top_10_year, United_States_income_bracket_10, United_States_income_bracket_40, United_States_income_bracket_50, China_income_bracket_10, China_income_bracket_40, China_income_bracket_50, India_income_bracket_10, India_income_bracket_40, India_income_bracket_50, Germany_income_bracket_10, Germany_income_bracket_40, Germany_income_bracket_50, United_Kingdom_income_bracket_10, United_Kingdom_income_bracket_40, United_Kingdom_income_bracket_50, Canada_income_bracket_10, Canada_income_bracket_40, Canada_income_bracket_50, Australia_income_bracket_10, Australia_income_bracket_40, Australia_income_bracket_50, Brazil_income_bracket_10, Brazil_income_bracket_40, Brazil_income_bracket_50, Nigeria_income_bracket_10, Nigeria_income_bracket_40, Nigeria_income_bracket_50, South_Africa_income_bracket_10, South_Africa_income_bracket_40, South_Africa_income_bracket_50)
+```
+
+
+```{r, echo=FALSE}
+# 3. Clean population data - remove data for all countries not within the selected set of 10 countries
+population_data <- read_excel('WID_Data_20102022-234748_Population.xlsx', sheet = "Data")
+population_percentile <- population_data[, "Percentile"]
+population_year <- population_data[, "Year"]
+United_States_population <- population_data[, grep(pattern=".USA", names(population_data), value = TRUE)]
+China_population <- population_data[, grep(pattern=".China", names(population_data), value = TRUE)][, c(1)]
+India_population <- population_data[, grep(pattern=".India", names(population_data), value = TRUE)]
+Germany_population <- population_data[, grep(pattern=".Germany", names(population_data), value = TRUE)]
+United_Kingdom_population <- population_data[, grep(pattern=".United Kingdom", names(population_data), value = TRUE)]
+Canada_population <- population_data[, grep(pattern=".Canada", names(population_data), value = TRUE)]
+Australia_population <- population_data[, grep(pattern=".Australia", names(population_data), value = TRUE)]
+Brazil_population <- population_data[, grep(pattern=".Brazil", names(population_data), value = TRUE)]
+Nigeria_population <- population_data[, grep(pattern=".Nigeria", names(population_data), value = TRUE)]
+South_Africa_population <- population_data[, grep(pattern=".South Africa", names(population_data), value = TRUE)][, c(2)]
+
+## Delete columns not within selected set of 10 countries
+population_ten_countries <- cbind(population_percentile, population_year, United_States_population, China_population, India_population, Germany_population, United_Kingdom_population, Canada_population, Australia_population, Brazil_population, Nigeria_population, South_Africa_population)
+```
+
+
+```{r, echo=FALSE}
+# 4. Clean average wealth data - remove data for all countries not within the selected set of 10 countries
+wealth_data <- read_excel('WID_Data_20102022-234942_Average Wealth-Per Adult, Wealth Income Ratio.xlsx', sheet = "Data")
+wealth_percentile <- wealth_data[, "Percentile"]
+wealth_year <- wealth_data[, "Year"]
+United_States_wealth <- wealth_data[, grep(pattern=".USA", names(wealth_data), value = TRUE)]
+China_wealth <- wealth_data[, grep(pattern=".China", names(wealth_data), value = TRUE)]
+India_wealth <- wealth_data[, grep(pattern=".India", names(wealth_data), value = TRUE)]
+Germany_wealth <- wealth_data[, grep(pattern=".Germany", names(wealth_data), value = TRUE)]
+United_Kingdom_wealth <- wealth_data[, grep(pattern=".United Kingdom", names(wealth_data), value = TRUE)]
+Canada_wealth <- wealth_data[, grep(pattern=".Canada", names(wealth_data), value = TRUE)]
+Australia_wealth <- wealth_data[, grep(pattern=".Australia", names(wealth_data), value = TRUE)][, c(3, 8)]
+Brazil_wealth <- wealth_data[, grep(pattern=".Brazil", names(wealth_data), value = TRUE)]
+Nigeria_wealth <- wealth_data[, grep(pattern=".Nigeria", names(wealth_data), value = TRUE)]
+South_Africa_wealth <- wealth_data[, grep(pattern=".South Africa", names(wealth_data), value = TRUE)][, c(2, 5)]
+
+## Delete columns not within selected set of 10 countries
+wealth_ten_countries <- cbind(wealth_percentile, wealth_year, United_States_wealth, China_wealth, India_wealth, Germany_wealth, United_Kingdom_wealth, Canada_wealth, Australia_wealth, Brazil_wealth, Nigeria_wealth, South_Africa_wealth)
+```
+
+To Michael S. Regan and global environmental agency administrators/directors,
+
+## Abstract: 
+
+During the duration of our study, our group focused on better understanding and modeling economic factors into a nation’s carbon emissions. Our analysis below highlights this objective in a two-folded manner, centered on understanding how different economic status groups affect a nation’s carbon footprint as well as using key economic and demographic characteristics to categorize nations into high, medium, or low carbon emitters. This categorization would enable countries to understand how they compare to other countries around the globe. 
+
+To conduct this study, we used the World Inequality Database as our primary source of data to obtain the income bracket distribution, the national wealth, the national income, population, and the nation’s carbon footprint from ten countries geographically spread around the world. As a result, we were able to conclude the following:
+
+1.	The amount of carbon emissions was not the same across all defined income brackets as the bottom 50% accounted for the most carbon emission within a country
+
+2.	By analyzing the logarithmic value of a nation’s income, wealth, and population, we have derived a model that predicts and categorizes a country as a high, medium, or low emitter with 95% accuracy.
+
+## Introduction
+When one turns on the news and sees natural disasters caused by weather, the next topic most meteorologists will expose viewers to is climate change. This global phenomenon is defined as the shifts within temperatures and weather patterns caused by human activities, which lead to significant climatic events. With more and more significant climatic events on the rise, more and more businesses and countries have changed their perspective and level of effort to combat this in the near future (outlining the year 2030 as the target for ensuring and implementing climate initiatives). Companies, such as Apple, have developed more sustainable and climate-conscious global supply chains and operations that aim to be carbon neutral. Similarly, many global countries and leaders have stepped forth to show the importance of this matter through initiatives/agreements such as the Paris Agreement/Paris Accords and establishing other global and national environmental targets.
+
+In conjunction with this shift in climate, there is also a pronounced change within the distribution of wealth within countries across the globe. As the world has adopted technological advancements, the number of billionaires within the world have also increased dramatically. In 2021 alone, the world saw 153 new billionaires – an astounding 3 new billionaires per week (Block, 2022). The creation of this new wealth has only led to an increase in economic disparity within the world. The International Monetary Fund (IMF) discovered that “the current disparities are extreme. The poorest half of the global population owns just €2,900 (in purchasing power parity) per adult, while the top 10 percent owns roughly 190 times as much. Income inequalities are not much better. The richest 10 percent today snap up 52 percent of all income. The poorest half get just 8.5 percent” (Staley, 2022). As seen in the graphic from The IMF in the Appendix (titled A lopsided world), the Fund also concluded from their analysis that 48% of global carbon emissions are caused by the top 10%. Using this as a baseline, we wanted to understand if there was truly a difference on the level of carbon emission between income levels.
+
+To conduct our study, as aforementioned, our dataset was selected from the World Inequality Database (WID), which is one of the most extensive databases on the evolution of world distribution of income and wealth within and between countries. The database is open-access and has compiled valid data from national databases, surveys, fiscal data, and wealth rankings. With its vast array of features, there are many key economic and social inequality questions that could be answered with access to this data. Our group has decided to focus our statistical analysis on the impact of certain economical features on a nation’s carbon footprint (Total National CO2 Footprint). For clarification, a nation’s total carbon footprint is equal to the combination of CO2 footprint and footprint of other greenhouse gases.
+
+While the dataset/database is vast, we narrowed down our analysis to the following key variables that will help us effectively analyze and assess the impact of economic and demographic statistics on carbon emissions for a subset of ten select countries (The United States, China, India, Germany, the United Kingdom, Canada, Australia, Brazil, Nigeria, and South Africa): national income, GDP, income inequality, population, market-value national wealth, years (from 2000 – 2020).  *It is important to note: to help standardize the findings for all countries, the US dollar was the currency selected for the appropriate variables *
+
+This leads to two distinct research questions:
+
+1.How do income brackets (top 10%, middle 40%, bottom 50%) affect a nation’s carbon footprint? 
+Based on the research mentioned above as well as additional publications/evidence highlighting that the wealthiest bracket emits notably more tons of carbon compared to the bottom bracket (Ritchie, 2018), we hope to use our data and our model to either validate this evidence or understand the true relationship between the different economic status groups and their respective effects on a nation’s carbon footprint. Our assumption refutes the evidence highlighted and is that carbon emissions are comparable amongst the three income brackets.
+
+  a.	$H_{0}$: Carbon emissions are the same across all income brackets.
+  b.	$H_{A}$: Carbon emissions vary across income brackets.
+
+If we see a disparity between the three income brackets, we also want to understand the income bracket that emits the most carbon. Is it truly the wealthiest top 10%?
+
+2.	Given a nation’s economic and demographic statistics, how accurately is an environmentalist able to classify/categorize countries into their appropriate level of carbon emissions?
+Our hopeful end goal is to create and use a model to predict the appropriate carbon emission category for other countries (unseen data). One of our key assumptions in creating this model is that there are no CO2 changes between any of the income brackets and changes within a country’s average wealth over time have not had an impact on the country’s respective carbon footprint, and thus, the difference in carbon emission class is proportional. 
+
+## Methods
+
+### Data Exploration
+
+To begin our analysis, we explored each country’s carbon emission as well as the relationship between that response and the other key economic indicators mentioned above. From the following graphs, we plotted CO2 over time for every country. In the graph on the left, we included all ten countries and realized a disparity in trends between China and USA versus the other eight. Thus, we classify USA and China as high emitters. The graph on the right zooms in on the remaining eight countries, which we classify as medium/low emitters. There is a linear trend for all countries, which allows us to assume linearity for the models we will fit.
+
+```{r, echo = FALSE, message = FALSE, results = 'hide'}
+only_co2_ten_countries <- ten_countries[, c(4,7,10,13,16,19,22,25,28,31)]
+only_wealth_ten_countries <- wealth_ten_countries[, c(3,5,7,9,11,13,15,17,19,21)]
+co2_wealth_ten_countries <- cbind(only_co2_ten_countries, only_wealth_ten_countries)
+```
+
+```{r, echo = FALSE, message = FALSE, results = 'hide', fig.align='center', fig.width=8, fig.height=8}
+# 3. Year by Carbon footprint (country colored by line)
+# colorblind-friendly palette: c("#88CCEE", "#CC6677", "#DDCC77", "#117733", "#332288", "#AA4499", "#44AA99", "#999933", "#6699CC", "#888888")
+graph2 <- ggplot(ten_countries)+ 
+  geom_line(aes(x = year, y = CO2_USA, color = "USA"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_China, color = "China"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_India, color = "India"), linewidth = 1)+
+  geom_line(aes(x = year, y = CO2_Germany, color = "Germany"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_United_Kingdom, color = "UK"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_Canada, color = "Canada"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_Australia, color = "Australia"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_Brazil, color = "Brazil"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_Nigeria, color = "Nigeria"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_South_Africa, color = "South_Africa"), linewidth = 1)+
+  scale_color_manual(values=c("#88CCEE", "#CC6677", "#DDCC77", "#117733", "#332288", "#AA4499", "#44AA99", "#999933", "#6699CC", "#888888")) + ggtitle("Graph 3.1: Carbon Emissions vs Year")  + 
+  labs(x = "Year", y = "Carbon Emissions (tonnes per capita)", color = "Country") + theme_bw() + theme(text = element_text(size=8), legend.text = element_text(size=6))
+
+graph3<-ggplot(ten_countries)+ 
+  geom_line(aes(x = year, y = CO2_India, color = "India"), linewidth = 1)+
+  geom_line(aes(x = year, y = CO2_Germany, color = "Germany"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_United_Kingdom, color = "UK"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_Canada, color = "Canada"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_Australia, color = "Australia"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_Brazil, color = "Brazil"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_Nigeria, color = "Nigeria"), linewidth = 1) +
+  geom_line(aes(x = year, y = CO2_South_Africa, color = "South_Africa"), linewidth = 1) + 
+  scale_color_manual(values=c("#88CCEE", "#CC6677", "#DDCC77", "#332288", "#AA4499", "#44AA99", "#999933", "#6699CC")) +
+    ggtitle("Graph 3: Carbon Emissions vs Year (Excludes USA and China)")  + labs(x = "Year", y = "Carbon Emissions (tons per capita)", color = "Country") + theme_bw() + theme(text = element_text(size=8), legend.text = element_text(size=6)) 
+
+plot_grid(graph2, graph3, nrow=2, ncol=1)
+```
+Upon initially recognizing this linear relationship, we took a deeper dive and analyzed each country separately. From the series of graphs found within the Appendix (titled GDP vs CO2) to see if there was a general trend between GDP and CO2 shared between all the countries, we found that there is no common direction. Since the graphs show the differing relationships between GDP and CO2, we would not be able to build a generalizable model that could apply to countries unseen by the model and thus opted not to use GDP as our indicator for national income/wealth. During our initial exploratory analysis, we discovered most countries show positive correlation between wealth and CO2 (except for USA, Germany, and UK). This finding was crucial for model development as the model needs to account for the differences between countries.
+
+To analyze the distribution and impact of income brackets, we fit a line to each of the above graphs and saw a clear distinction between the high and low emitters. The high emitters, China and USA, rise high above the fit line and the rest either sit on the line or below. This is consistent across the three graphs. To correct for the disparity between the high and low emitters, we need to consider a linear transformation on carbon emissions to create a best fit model. 
+
+```{r echo=FALSE, message=FALSE, result = "hide"}
+
+# stacking income brackets
+income_bracket_USA <- income_bracket_all_ten_countries[, c(2,3,4)]
+colnames(income_bracket_USA) <- c('top10','middle40','bottom50')
+income_bracket_china <- income_bracket_all_ten_countries[, c(5,6,7)]
+colnames(income_bracket_china) <- c('top10','middle40','bottom50')
+income_bracket_India <- income_bracket_all_ten_countries[, c(8,9,10)]
+colnames(income_bracket_India) <- c('top10','middle40','bottom50')
+income_bracket_Germany <- income_bracket_all_ten_countries[, c(11,12,13)]
+colnames(income_bracket_Germany) <- c('top10','middle40','bottom50')
+income_bracket_UK <- income_bracket_all_ten_countries[, c(14,15,16)]
+colnames(income_bracket_UK) <- c('top10','middle40','bottom50')
+income_bracket_Canada <- income_bracket_all_ten_countries[, c(17,18,19)]
+colnames(income_bracket_Canada) <- c('top10','middle40','bottom50')
+income_bracket_Australia <- income_bracket_all_ten_countries[, c(20,21,22)]
+colnames(income_bracket_Australia) <- c('top10','middle40','bottom50')
+income_bracket_Brazil <- income_bracket_all_ten_countries[, c(23,24,25)]
+colnames(income_bracket_Brazil) <- c('top10','middle40','bottom50')
+income_bracket_Nigeria <- income_bracket_all_ten_countries[, c(26,27,28)]
+colnames(income_bracket_Nigeria) <- c('top10','middle40','bottom50')
+income_bracket_NorthAfrica <- income_bracket_all_ten_countries[, c(29,30,31)]
+colnames(income_bracket_NorthAfrica) <- c('top10','middle40','bottom50')
+
+income_brackets <- bind_rows(income_bracket_USA, income_bracket_china, income_bracket_India, income_bracket_Germany, income_bracket_UK, income_bracket_Canada, income_bracket_Australia, income_bracket_Brazil, income_bracket_Nigeria, income_bracket_NorthAfrica)
+country_code <- rep(1:10, each = 21)
+income_brackets_for_model <- cbind(income_brackets, country_code)
+income_brackets_for_model$country_code <- factor(income_brackets_for_model$country_code)
+
+# stacking carbon footprint
+co2_USA <- co2_wealth_ten_countries[, 1]
+co2_China <- co2_wealth_ten_countries[, 2]
+co2_India <- co2_wealth_ten_countries[, 3]
+co2_Germany <- co2_wealth_ten_countries[, 4]
+co2_UK <- co2_wealth_ten_countries[, 5]
+co2_Canada <- co2_wealth_ten_countries[, 6]
+co2_Australia <- co2_wealth_ten_countries[, 7]
+co2_Brazil <- co2_wealth_ten_countries[, 8]
+co2_Nigira <- co2_wealth_ten_countries[, 9]
+co2_SouthAfrica <- co2_wealth_ten_countries[, 10]
+
+stacking_co2 <- c(co2_USA,co2_China,co2_India,co2_Germany,co2_UK, co2_Canada, co2_Australia, co2_Brazil, co2_Nigira, co2_SouthAfrica)
+
+dataset_for_model1 <- cbind(income_brackets_for_model, stacking_co2)
+
+```
+
+```{r, echo=FALSE}
+colnames(population_ten_countries) <- c("Percentile","Year","pop_usa","pop_china","pop_india","pop_germany","pop_uk","pop_canada","pop_aus_nz","pop_oceania", "pop_australia","pop_brazil","pop_nigeria","pop_southafrica")
+population_ten_countries <- subset(population_ten_countries, select=-c(pop_aus_nz, pop_oceania))
+```
+
+```{r, echo=FALSE}
+nat_inc <- ten_countries[ , grepl("National_income", names( ten_countries ) ) ]
+nat_inc$Year <- 2000:2020
+co2 <- ten_countries[ , grepl("CO2", names( ten_countries ) ) ]
+co2$Year <- 2000:2020
+pop <- population_ten_countries[ , grepl("pop", names( population_ten_countries ) ) ]
+pop$Year <- 2000:2020
+wealth <- co2_wealth_ten_countries[ , grepl("wealth", names( co2_wealth_ten_countries ) ) ]
+wealth$Year <- 2000:2020
+```
+
+```{r, echo=FALSE}
+wealth_stack <- reshape2::melt(wealth, id.vars = "Year", variable.name = 'country_wealth', value.name='National_Wealth')
+wealth_stack$Country <- toupper(sub(".*_", "", wealth_stack$country_wealth))
+pop_stack <- reshape2::melt(pop, id.vars = "Year", variable.name='country_pop', value.name='National_Population')
+pop_stack$Country <- toupper(sub(".*_", "", pop_stack$country_pop))
+pop_stack$Country[pop_stack$Country == "SOUTHAFRICA"] <- "SOUTH AFRICA"
+co2_stack <- reshape2::melt(co2, id.vars = "Year", variable.name='country_co2', value.name='National_Carbon_Emissions')
+co2_stack$Country <- toupper(sub(".*_", "", co2_stack$country_co2))
+co2_stack$Country[co2_stack$Country == "KINGDOM"] <- "UK"
+co2_stack$Country[co2_stack$Country == "AFRICA"] <- "SOUTH AFRICA"
+nat_inc_stack <- reshape2::melt(nat_inc, id.vars = "Year", variable.name='country_income', value.name='National_Income')
+nat_inc_stack$Country <- toupper(sub(".*_", "", nat_inc_stack$country_income))
+nat_inc_stack$Country[nat_inc_stack$Country == "KINGDOM"] <- "UK"
+nat_inc_stack$Country[nat_inc_stack$Country == "AFRICA"] <- "SOUTH AFRICA"
+complete_model_2_df <- wealth_stack[, c("Year", "Country", "National_Wealth")]
+complete_model_2_df <- merge(complete_model_2_df, pop_stack, by=c("Year", "Country"))
+complete_model_2_df <- merge(complete_model_2_df, co2_stack, by=c("Year", "Country"))
+complete_model_2_df <- merge(complete_model_2_df, nat_inc_stack, by=c("Year", "Country"))
+dropcolFromCompleteModel <- c("country_pop", "country_co2", "country_income")
+complete_model_2_df = complete_model_2_df[, !(names(complete_model_2_df) %in% dropcolFromCompleteModel)]
+complete_model_2_df <- complete_model_2_df[order(complete_model_2_df[,2], complete_model_2_df[,1]), ]
+mean_co2 <- mean(co2_stack$National.carbon.emissions)
+```
+
+
+```{r, echo=FALSE}
+##### create the dataset
+Year <- population_ten_countries["Year"]
+Country <- co2_stack["Country"]
+CO2<- co2_stack["National_Carbon_Emissions"]
+National_wealth <- wealth_stack["National_Wealth"]
+National_income<- nat_inc_stack["National_Income"]
+Population <- pop_stack["National_Population"]
+m2_data<- data.frame(Year, Country, CO2, National_wealth, National_income, Population)
+
+names(m2_data)[names(m2_data) == "National_Carbon_Emissions"] <- "CO2"
+names(m2_data)[names(m2_data) == "National_Population"] <- "Population"
+# m2_data$Country <- factor(m2_data$Country)
+meanC02 <- mean(as.matrix(only_co2_ten_countries))
+m2_data1<-m2_data %>% mutate(
+  CO2_C = case_when(CO2 < 500 ~ "low",
+                    CO2<2000 ~ "med",
+                    CO2 >= 2000 ~ "high")
+)
+m2_data1$Country <- factor(m2_data1$Country)
+m2_data1$CO2_C <- factor(m2_data1$CO2_C)
+m2_data1$CO2_C <- ordered(m2_data1$CO2_C, levels = c("low", "med", "high"))
+
+m2_data1$pop_log <- log(m2_data1$Population)
+m2_data1$income_log <- log(m2_data1$National_Income)
+m2_data1$wealth_log <- log(m2_data1$National_Wealth)
+```
+
+```{r, include=FALSE, echo=FALSE} 
+##### co2 emissions per capita vs GDP per capita
+# Countries: United States, China, India, Germany, United Kingdom, Canada, Australia, 
+# Brazil, Nigeria, South Africa
+GDP <- ten_countries[, c(3,6,9,12,15,18,21,24,27,30)]
+GDP$Year <- (2000:2020)
+GDP_stack <- reshape2::melt(GDP, id.vars = "Year")
+colnames(GDP_stack)[3] <- "GDP"
+dataset5 <- cbind(m2_data, GDP_stack)
+dataset5$Country = factor(m2_data$Country)
+########## for co2 emissions per capita vs GDP per capita 2000
+# data_2000 <- dataset5[c(1,22,43,64,85,106,127,148,169,190), c(1:9)]
+# fig_2000 <- plot_ly(data_2000, x = ~GDP, y = ~CO2, text = ~Country, type = 'scatter',
+#                mode = 'markers', size = ~Population, color = ~Country,
+#                sizes = c(10,50),
+#                marker = list(opacity = 0.5, sizemode = 'diameter'))
+# fig_2000 <- fig_2000 %>% layout(title = 'CO2 emission vs GDP per capita 2000',
+#          xaxis = list(showgrid = FALSE),
+#          yaxis = list(showgrid = FALSE),
+#          showlegend = TRUE)
+# fig_2000
+#               
+# data_2020 <- dataset5[c(21,42,63,84,105,126,147,168,189,210), c(1:9)]
+# fig_2020 <- plot_ly(data_2020, x = ~GDP, y = ~CO2, text = ~Country, type = 'scatter',
+#                mode = 'markers', size = ~Population, color = ~Country,colors = "Paired",
+#                sizes = c(10,50),
+#                marker = list(opacity = 0.5, sizemode = 'diameter'))
+# 
+# fig_2020 <- fig_2020 %>% layout(title = 'CO2 emissions vs GDP per capita, 2020',
+#          xaxis = list(showgrid = FALSE),
+#          yaxis = list(showgrid = FALSE),
+#          showlegend = TRUE)
+# fig_2020
+
+```
+
+```{r, echo=FALSE, message=FALSE, result='hide', fig.align='center', fig.height=8, fig.width=8}
+# some EDA plots for model1, but it doesn't seem to make sense.
+ie.10 <- ggplot(dataset_for_model1, aes(x = top10, y = stacking_co2)) +
+  geom_point(alpha = 0.75, aes(color = country_code)) +
+  geom_smooth(method  = "lm", color = "red") +
+  scale_color_manual(name='Countries',
+                     labels=c('USA', 'China', 'India', 'Germany', 'UK', 'Canada', 'Australia', 'Brazil', 'Nigeria', 'South Africa'),
+                     values=c("#88CCEE", "#CC6677", "#DDCC77", "#117733", "#332288", "#AA4499", "#44AA99", "#999933", "#6699CC", "#888888"))+
+  labs(title = "Top 10% Income Bracket: Share of GDP vs Carbon Emissions", x = "Income inequality (share of GDP)", y = "Carbon emissions (tonnes per capita)") + theme(legend.position="none", text = element_text(size=8))
+
+ie.40 <- ggplot(dataset_for_model1, aes(x = middle40, y = stacking_co2)) +
+  geom_point(alpha = 0.75, aes(color = country_code)) +
+  geom_smooth(method  = "lm", color = "red") +
+  scale_color_manual(name='Countries',
+                     labels=c('USA', 'China', 'India', 'Germany', 'UK', 'Canada', 'Australia', 'Brazil', 'Nigeria', 'South Africa'),
+                     values=c("#88CCEE", "#CC6677", "#DDCC77", "#117733", "#332288", "#AA4499", "#44AA99", "#999933", "#6699CC", "#888888"))+
+  labs(title = "Middle 40% Income Bracket: Share of GDP vs Carbon Emissions", x = "Income inequality (share of GDP)", y = "Carbon emissions (tonnes per capita)")+ theme(legend.position="none", text = element_text(size=8))
+
+ie.50 <- ggplot(dataset_for_model1, aes(x = bottom50, y = stacking_co2)) +
+  geom_point(alpha = 0.75, aes(color = country_code)) +
+  geom_smooth(method  = "lm", color = "red") +
+ scale_color_manual(name='Countries',
+                     labels=c('USA', 'China', 'India', 'Germany', 'UK', 'Canada', 'Australia', 'Brazil', 'Nigeria', 'South Africa'),
+                     values=c("#88CCEE", "#CC6677", "#DDCC77", "#117733", "#332288", "#AA4499", "#44AA99", "#999933", "#6699CC", "#888888"))+
+  labs(title = "Bottom 50% Income Bracket: Share of GDP vs Carbon Emissions", x = "Income inequality (share of GDP)", y = "Carbon emissions (tonnes per capita)") + theme(legend.position="bottom", text = element_text(size=8))
+legend <- get_legend(ie.10 + 
+    guides(color = guide_legend(nrow=1)) +
+    theme(legend.position = "bottom"))
+
+
+plot_grid(ie.10 , ie.40, ie.50,  nrow = 3)
+
+```
+Citing the IMF, the predictors that are important in properly categorizing the level of carbon emissions for a respective country to include within our best fit model are national income, market-value national wealth, and population size. Per the WID and our trend analysis of GDP, national income is the only income concept that has an internationally agreed definition (established by the United Nations System of National Accounts, see SNA 2008). Similarly, the national economy/wealth - in the national accounts sense – encompasses all domestic sectors, i.e. all entities that are resident of a given country (in the sense of their economic activity), whether they belong to the private sector, the corporate sector, the government sector. Lastly, to account for the disparities between our select countries, it is best to include population. While the WID has additional variables, the variation amongst countries for those respective variables is too country-specific that it would inhibit our ability to create a generalize model.
+To ensure that our model did not have any missing data, was complete, and representative, we subsetted and selected countries from WID with data available across all aforementioned predictors across all 20 years (2000 – 2020).
+
+```{r, echo=FALSE, message = FALSE, fig.width = 12, fig.height = 10, fig.align = 'center'}
+##### EDA analysis for model 2
+# colorblind-friendly palette
+colorBlindBlack3  <- c("#009E73", "#F0E442", "#D55E00")
+## CO2-income
+eda_m2_1 <- ggplot(m2_data1, aes(x=CO2_C, y = National_Income, fill = CO2_C)) +
+  geom_boxplot() +
+  stat_summary(fun.y="mean") +
+  scale_fill_manual(values=colorBlindBlack3) +
+  labs(title = "Carbon Emissions vs National Income",
+       x = "Carbon Emission Level",
+       y = "National Income (USD)",
+       fill = "Carbon Emission Level") +
+  theme_classic() + theme(legend.position = "top")
+## CO2-wealth
+eda_m2_2 <- ggplot(m2_data1, aes(x=CO2_C, y = National_Wealth, fill = CO2_C)) +
+  geom_boxplot() +
+  stat_summary(fun.y="mean") +
+  scale_fill_manual(values=colorBlindBlack3) +
+  labs(title = "Carbon Emission vs Wealth",
+       x = "Carbon Emission Level",
+       y = "National Wealth (USD)",
+       fill = "Carbon Emission Level") +
+  theme_classic() + theme(legend.position = "top")
+## CO2-Population
+eda_m2_3 <- ggplot(m2_data1, aes(x=CO2_C, y = Population, fill = CO2_C)) +
+  geom_boxplot() +
+  stat_summary(fun.y="mean") +
+  scale_fill_manual(values=colorBlindBlack3) +
+  labs(title = "Carbon Emissions vs Population",
+       x = "Carbon Emission Level",
+       y = "National population",
+       fill = "Carbon Emissions Level") +
+  theme_classic() + theme(legend.position = "top")
+grid.arrange(eda_m2_1,eda_m2_2,eda_m2_3, nrow = 2)
+```
+
+
+### Data Modeling and Assessment
+
+To account for the differences between countries, the best fit models for both of our research questions are mixed models. Similar to linear regression models, mixed models will enable us to better analyze the carbon emission while estimating the random effect/impact of each country. In addition to taking the impact of country into account, a mixed model will also take into account any correlation that exists within our data. The generalized linear mixed model can be represented through the following framework/model formula:
+
+$$Y = X_{i}\beta + Z_{j}u + \epsilon$$
+
+#### Question 1:
+
+
+With this initial exploratory data analysis serving as a backdrop, we decided to log transform our outcome variable, carbon emissions, to account for the high variance between high and low emitters (which can be seen through the graph below). We opted to use a linear mixed model as compared to a linear model and included country as a random effect to make our model more generalizable since we found each country followed slightly different trends. After including it, the model no longer violates the linearity assumption (see appendix for previous versions of model 1).
+
+The $i$ and $j$ within the above generalized linear mixed model equal 3 (for the number of income brackets) and 10 (for the number of countries) respectively to represent this research question. This equates to the following model:
+
+$$Log(CO_{2}) = \beta_{1}Top10 + \beta_{2}Middle40 + \beta_{3}Bottom50 + (1|Country)$$
+For this generalized model, we quickly assumed that the similarity amongst the predictors (all three income brackets) would lead to multicollinearity. We were able to confirm this through two distinct measures: 1) all income brackets are related as the shares between the three incomes total 1 and 2) the VIF is greater than 10. However, because the predictors are interdependent but independent from the response variable (carbon emissions), we can continue with our analysis under this assumption.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis', header=FALSE}
+mod1 <- lmer(log(stacking_co2) ~ -1 + top10 + middle40 + bottom50 + (1|country_code), data=dataset_for_model1)
+stargazer(vif(mod1),header=FALSE,title="VIF Multicollinearity Check for Q1: CO2 and Income Bracket Analysis", digits = 2,type='latex',no.space = TRUE,column.sep.width = "3pt",single.row=TRUE)
+```
+
+#### Question 2:
+In the CO2 vs Income and CO2 vs Wealth graph, we do not see major differences in range and mean among the three carbon emitter levels. However, in the CO2 vs population graph there is a major difference between low/medium emitters compared to high emitters. Logically, this makes sense, since with more people a country requires more resources and energy to accommodate them. Based on this finding, we applied log transformation to all predictor variables (population, national income, and wealth) to normalize the differences amongst the countries.
+
+Our goal is to predict each country’s level of carbon emissions for each year. Since the outcome is ranked low, medium, and high, an ordinal model would be the best fit. An ordinal model operates on the proportional odds assumption which we checked with the Brant test and found that the model does not violate this assumption. We also checked for multicollinearity and found that all VIF values fell under the threshold. 
+
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis', header=FALSE}
+mixcl <- clmm(CO2_C ~ income_log + wealth_log + pop_log + (1|Country), data=m2_data1, Hess=TRUE)
+
+stargazer(vif(mixcl),header=FALSE,title="VIF Multicollinearity Check for Q2: Carbon Emissions and Economic/Demographic Indicators Analysis", digits = 2,type='latex',no.space = TRUE,column.sep.width = "3pt",single.row=TRUE)
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis', header=FALSE}
+multinomM2 <- polr(CO2_C ~ income_log + wealth_log + pop_log, data=m2_data1, Hess = TRUE)
+
+stargazer(
+  brant(multinomM2),
+  type = "latex",
+  report = ("vc*p"),
+  title = "Proportional Odds Assumption Check for Question 2: Carbon Emissions and Economic/Demographic Indicators Analysis",
+  header = FALSE,
+  single.row = TRUE,
+  column.sep.width = "0.5pt",
+  digits = 2
+)
+
+```
+Since all assumptions have been held, we fit a cumulative link mixed model to predict the ordinal outcome variable. Similar to the generalized linear mixed model used to represent Question 1, a cumulative link mixed model enables on to analyze ordinal response variables while still maintaining random effects. As we aim to categorize and rank countries based on their respective carbon emission levels, it is more powerful to maintain order as compared to a multinomial model. To maintain and account for this order, the generalized linear mixed model is tweaked to the following model:
+
+
+$$ Y = \alpha_{j} - X_i\beta + Z_t~_[~_i~_]u_t + \epsilon$$
+where $\alpha$ is the intercept/threshold coefficient between the different level comparison combination (i.e. Low | Medium and Medium | High), the $i$, $j$ and $t$ within the above cumulative link mixed model equal 3 (for the number of predictors (income, wealth, population)), 3 (for the number of emission levels (low, medium, high), and 10 (for the number of countries) respectively to represent this research question. This equates to the following model:
+
+$$ P(Y \le j) = \alpha_{j} + \beta_{1}(Income) + \beta_{2}(Wealth) + \beta_{3}(Population) + (1 | Country) $$
+
+### Results
+
+#### Model 1: Linear Mixed Model
+
+
+Our resulting model to test the equivalence amongst the income bracket is the following:
+
+$$ Log(CO_2) = 126.37Top10 + 127.33Middle40 + 127.12Bottom50 - 117.10$$
+
+With country as our random effect, we need to test the fixed effects with a Wald test. The Wald test compares the coefficient's estimated value with the estimated standard error for the coefficient. Our null hypothesis states that the variance between coefficients for the random effect is zero. With a 5% significance level, we found all three predictors to be statistically significant. The calculated chi-squared values are greater than the chi-square critical value for the degrees of freedom specified (3.84), which reaffirms that we fail to reject the null hypothesis. Therefore, we can confirm there is no variance between the coefficients of the three income brackets when inferring their relationship with carbon emissions. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis', header=FALSE}
+stargazer(r.squaredGLMM(mod1),dep.var.labels = c("Marginal R-squared", "Conditional R-squared"), header=FALSE,title="Model 1: Marginal and Conditional R-squared", digits = 2,type='latex',no.space = TRUE,column.sep.width = "3pt",single.row=TRUE)
+```
+
+Marginal R-squared is concerned with the variance explained by fixed effects. Our model returned low marginal R-squared (3.4%) which indicates the fixed effects do not explain the variance in the outcome. 
+
+Conditional R-squared is concerned with the variance explained by both fixed and random factors of the entire model. We have a very high conditional r-squared that accounts for 98% of the variance in the outcome variable. Which indicates country determines a lot of the outcome variance. Random effects explain additional variance compared to the fixed effects. With just a linear regression model, we still see a very large R-squared (0.97)
+
+#### Model 2: Cumulative Link Mixed Model
+Our resulting model to classify a country’s carbon emission is the following:
+
+$$ Low = 297.41 + 1.16Log(Income) + 12.40Log(Wealth) + 7.60Log(Population) + 186.20$$
+
+With our specified standards for high (> 2000 tons), medium (500 – 2000 tons), and low (< 500 tons) emitters, there are only two countries in the world that fit the definition of a high emitter: USA and China. Since we trained our model with both countries, we do not have other countries to test our model's ability to predict high emitters. However, the disparity between high and low/medium emitters is so large we are more concerned about the precision of our model distinguishing between low and medium emitters. Our test set contains five countries (Argentina, Ghana, Mexico, Norway, and Qatar) that are similar to our training set in that they are geographically spread out and that fall between these two categories and our model predicted their emission levels with 95% accuracy which is greater than the no information rate. As seen through our confusion matrix, there is high sensitivity with the low class and high specificity meaning our model correctly classified most low emitters (approximately 96%).
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis', header=FALSE}
+
+#stargazer(mod1,header=FALSE,title="Model 1 Summary", digits = 2,type='latex', dep.var.labels = c("Log(Carbon Emissions)"), covariate.labels=c("Top 10% Income Bracket (GDP Share)","Middle 40% Income Bracket (GDP Share)", "Bottom 50% Income Bracket (GDP Share)"), no.space =TRUE,column.sep.width = "3pt",single.row=TRUE)
+```
+
+```{r, echo=FALSE}
+plot(mod1)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis', header=FALSE}
+
+summary(mixcl)
+```
+
+```{r, echo = FALSE, message = FALSE, results = 'hide', fig.align='center'}
+## select 10 countries
+yearPredict <- inc_gdp_co2_2[, "Year"]
+France <- inc_gdp_co2_2[, grep(pattern=".France", names(inc_gdp_co2_2), value = TRUE)]
+Japan <- inc_gdp_co2_2[, grep(pattern=".Japan", names(inc_gdp_co2_2), value = TRUE)]
+Russia <- inc_gdp_co2_2[, grep(pattern=".Russian Federation", names(inc_gdp_co2_2), value = TRUE)]
+Mexico <- inc_gdp_co2_2[, grep(pattern=".Mexico", names(inc_gdp_co2_2), value = TRUE)]
+Belgium <- inc_gdp_co2_2[, grep(pattern=".Belgium", names(inc_gdp_co2_2), value = TRUE)]
+Norway <- inc_gdp_co2_2[, grep(pattern=".Norway", names(inc_gdp_co2_2), value = TRUE)]
+Indonesia <- inc_gdp_co2_2[, grep(pattern=".Indonesia", names(inc_gdp_co2_2), value = TRUE)]
+Argentina <- inc_gdp_co2_2[, grep(pattern=".Argentina", names(inc_gdp_co2_2), value = TRUE)]
+Ghana <- inc_gdp_co2_2[, grep(pattern=".Ghana", names(inc_gdp_co2_2), value = TRUE)]
+Qatar <- inc_gdp_co2_2[, grep(pattern=".Qatar", names(inc_gdp_co2_2), value = TRUE)]
+# combine these columns
+ten_countries_predict <- cbind(yearPredict, France, Japan, Russia, Mexico, Belgium, Norway, Indonesia, Argentina, Ghana, Qatar)
+# rename the column (make it shorter...)
+# rename the column (make it shorter...)
+colnames(ten_countries_predict) <- c("year", "National_income_France" , "GDP_France", "CO2_France"
+                             , "National_income_Japan" , "GDP_Japan", "CO2_Japan"
+                             , "National_income_Russia" , "GDP_Russia", "CO2_Russia"
+                             , "National_income_Mexico" , "GDP_Mexico", "CO2_Mexico"
+                             , "National_income_Belgium" , "GDP_Belgium", "CO2_Belgium"
+                             , "National_income_Norway" , "GDP_Norway", "CO2_Norway"
+                             , "National_income_Indonesia" , "GDP_Indonesia", "CO2_Indonesia"
+                             , "National_income_Argentina" , "GDP_Argentina", "CO2_Argentina"
+                             , "National_income_Ghana" , "GDP_Ghana", "CO2_Ghana"
+                             , "National_income_Qatar" , "GDP_Qatar", "CO2_Qatar")
+```
+
+```{r, echo = FALSE, message = FALSE, results = 'hide', fig.align='center'}
+# 3. Clean population data - remove data for all countries not within the selected set of 10 countries
+population_percentile_predict <- population_data[, "Percentile"]
+population_year_predict <- population_data[, "Year"]
+France_population_predict <- population_data[, grep(pattern=".France", names(population_data), value = TRUE)]
+Japan_population_predict <- population_data[, grep(pattern=".Japan", names(population_data), value = TRUE)][, c(1)]
+Russia_population_predict <- population_data[, grep(pattern=".Russian Federation", names(population_data), value = TRUE)]
+Mexico_population_predict <- population_data[, grep(pattern=".Mexico", names(population_data), value = TRUE)]
+Belgium_population_predict <- population_data[, grep(pattern=".Belgium", names(population_data), value = TRUE)]
+Norway_population_predict <- population_data[, grep(pattern=".Norway", names(population_data), value = TRUE)]
+Indonesia_population_predict <- population_data[, grep(pattern=".Indonesia", names(population_data), value = TRUE)]
+Argentina_population_predict <- population_data[, grep(pattern=".Argentina", names(population_data), value = TRUE)]
+Ghana_population_predict <- population_data[, grep(pattern=".Ghana", names(population_data), value = TRUE)]
+Qatar_population_predict <- population_data[, grep(pattern=".Qatar", names(population_data), value = TRUE)]
+## Delete columns not within selected set of 10 countries
+population_ten_countries_predict <- cbind(population_percentile_predict, population_year_predict, France_population_predict, Japan_population_predict, Russia_population_predict, Mexico_population_predict, Belgium_population_predict, Norway_population_predict, Indonesia_population_predict, Argentina_population_predict, Ghana_population_predict, Qatar_population_predict)
+```
+
+
+```{r, echo=FALSE}
+# 4. Clean average wealth data - remove data for all countries not within the selected set of 10 countries
+wealth_percentile_predict <- wealth_data[, "Percentile"]
+wealth_year_predict <- wealth_data[, "Year"]
+France_wealth_predict <- wealth_data[, grep(pattern=".France", names(wealth_data), value = TRUE)]
+Japan_wealth_predict <- wealth_data[, grep(pattern=".Japan", names(wealth_data), value = TRUE)]
+Russia_wealth_predict <- wealth_data[, grep(pattern=".Russian Federation", names(wealth_data), value = TRUE)]
+Mexico_wealth_predict <- wealth_data[, grep(pattern=".Mexico", names(wealth_data), value = TRUE)]
+Belgium_wealth_predict <- wealth_data[, grep(pattern=".Belgium", names(wealth_data), value = TRUE)]
+Norway_wealth_predict <- wealth_data[, grep(pattern=".Norway", names(wealth_data), value = TRUE)]
+Indonesia_wealth_predict <- wealth_data[, grep(pattern=".Indonesia", names(wealth_data), value = TRUE)]
+Argentina_wealth_predict <- wealth_data[, grep(pattern=".Argentina", names(wealth_data), value = TRUE)]
+Ghana_wealth_predict <- wealth_data[, grep(pattern=".Ghana", names(wealth_data), value = TRUE)]
+Qatar_wealth_predict <- wealth_data[, grep(pattern=".Qatar", names(wealth_data), value = TRUE)]
+## Delete columns not within selected set of 10 countries
+wealth_ten_countries_predict <- cbind(wealth_percentile_predict, wealth_year_predict, France_wealth_predict, Japan_wealth_predict, Russia_wealth_predict, Mexico_wealth_predict, Belgium_wealth_predict, Norway_wealth_predict, Indonesia_wealth_predict, Argentina_wealth_predict, Ghana_wealth_predict, Qatar_wealth_predict)
+```
+
+```{r, echo=FALSE, result = "hide"}
+#correlation matrix
+only_co2_ten_countries_predict <- ten_countries_predict[, c(4,7,10,13,16,19,22,25,28,31)]
+only_wealth_ten_countries_predict <- wealth_ten_countries_predict[, c(3,5,7,9,11,13,15,17,19,21)]
+co2_wealth_ten_countries_predict <- cbind(only_co2_ten_countries_predict, only_wealth_ten_countries_predict)
+colnames(co2_wealth_ten_countries_predict) <- c(
+  "co2_france","co2_japan","co2_russia","co2_mexico","co2_belgium","co2_norway","co2_indonesia","co2_argentina","co2_ghana","co2_qatar", 
+  "wealth_france","wealth_japan","wealth_russia","wealth_mexico","wealth_belgium","wealth_norway","wealth_indonesia","wealth_argentina","wealth_ghana","wealth_qatar")
+#corrplot(cor(co2_wealth_ten_countries), method  = "circle", type = "upper")
+#cor(co2_wealth_ten_countries)
+```
+
+```{r, echo = FALSE, message = FALSE, results = 'hide', fig.align='center'}
+colnames(population_ten_countries_predict) <- c("Percentile","Year","pop_france","pop_japan","pop_russia","pop_mexico","pop_belgium","pop_norway","pop_indonesia","pop_argentina", "pop_ghana","pop_qatar")
+population_ten_countries_predict
+```
+
+```{r, echo = FALSE, message = FALSE, results = 'hide', fig.align='center'}
+nat_inc_predict <- ten_countries_predict[ , grepl("National_income", names( ten_countries_predict ) ) ]
+nat_inc_predict$Year <- 2000:2020
+co2_predict <- ten_countries_predict[ , grepl("CO2", names( ten_countries_predict ) ) ]
+co2_predict$Year <- 2000:2020
+pop_predict <- population_ten_countries_predict[ , grepl("pop", names( population_ten_countries_predict ) ) ]
+pop_predict$Year <- 2000:2020
+wealth_predict <- co2_wealth_ten_countries_predict[ , grepl("wealth", names( co2_wealth_ten_countries_predict ) ) ]
+wealth_predict$Year <- 2000:2020
+```
+
+```{r, echo = FALSE, message = FALSE, results = 'hide', fig.align='center'}
+wealth_stack_predict <- reshape2::melt(wealth_predict, id.vars = "Year", variable.name = 'country_wealth', value.name='National_Wealth')
+wealth_stack_predict$Country <- toupper(sub(".*_", "", wealth_stack_predict$country_wealth))
+pop_stack_predict <- reshape2::melt(pop_predict, id.vars = "Year", variable.name='country_pop', value.name='National_Population')
+pop_stack_predict$Country <- toupper(sub(".*_", "", pop_stack_predict$country_pop))
+co2_stack_predict <- reshape2::melt(co2_predict, id.vars = "Year", variable.name='country_co2', value.name='National_Carbon_Emissions')
+co2_stack_predict$Country <- toupper(sub(".*_", "", co2_stack_predict$country_co2))
+nat_inc_stack_predict <- reshape2::melt(nat_inc_predict, id.vars = "Year", variable.name='country_income', value.name='National_Income')
+nat_inc_stack_predict$Country <- toupper(sub(".*_", "", nat_inc_stack_predict$country_income))
+predict_model_df <- wealth_stack_predict[, c("Year", "Country", "National_Wealth")]
+predict_model_df <- merge(predict_model_df, pop_stack_predict, by=c("Year", "Country"))
+predict_model_df <- merge(predict_model_df, co2_stack_predict, by=c("Year", "Country"))
+predict_model_df <- merge(predict_model_df, nat_inc_stack_predict, by=c("Year", "Country"))
+dropcolFromPredictModel <- c("country_pop", "country_co2", "country_income")
+predict_model_df = predict_model_df[, !(names(predict_model_df) %in% dropcolFromPredictModel)]
+predict_model_df <- predict_model_df[order(predict_model_df[,2], predict_model_df[,1]), ]
+```
+
+
+
+```{r, echo = FALSE, message = FALSE, results = 'hide', fig.align='center'}
+mixcl2 <- clmm2(CO2_C ~ income_log + wealth_log + pop_log, random = Country, data=m2_data1, Hess=TRUE)
+summary(mixcl2)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis', header=FALSE, quiet = TRUE, include=FALSE}
+rownames(predict_model_df) <- 1:nrow(predict_model_df)
+predict_model_df$pop_log <- log(predict_model_df$National_Population)
+predict_model_df$income_log <- log(predict_model_df$National_Income)
+predict_model_df$wealth_log <- log(predict_model_df$National_Wealth)
+predict_model_df <- predict_model_df %>% mutate(
+  CO2_C = case_when(National_Carbon_Emissions < 500 ~ "low",
+                    National_Carbon_Emissions<2000 ~ "med",
+                    National_Carbon_Emissions >= 2000 ~ "high"))
+predict_model_df$CO2_C <- factor(predict_model_df$CO2_C)
+predict_model_df$CO2_C <- ordered(predict_model_df$CO2_C, levels = c("low", "med", "high"))
+```
+
+
+
+
+Running predictions on a smaller test set: 
+
+```{r, echo = FALSE, message = FALSE, results = 'hide', fig.align='center'}
+argentina_sub <- filter(predict_model_df, Country == 'ARGENTINA')
+ghana_sub <- filter(predict_model_df, Country == 'GHANA')
+mexico_sub <- filter(predict_model_df, Country == 'MEXICO')
+norway_sub <- filter(predict_model_df, Country == 'NORWAY')
+qatar_sub <- filter(predict_model_df, Country == 'QATAR')
+sub_predict <- rbind(argentina_sub, ghana_sub, mexico_sub, norway_sub, qatar_sub)
+```
+
+```{r, echo = FALSE, message = FALSE, results = 'hide', fig.align='center'}
+predict_test_data <- data.frame(probs=predict(mixcl2, sub_predict, type = "class"))
+predict_test_data <- predict_test_data %>% mutate(
+  predicted_class = case_when(probs<0.5 ~ "med",
+                    probs >= 0.5 ~ "low"))
+predict_test_data$predicted_class <- ordered(predict_test_data$predicted_class, levels = c("low", "med", "high"))
+```
+
+```{r, echo = FALSE, message = FALSE, results = 'hide', fig.align='center'}
+post_pred_sub <- cbind(sub_predict, predict_test_data)
+```
+```{r, echo = FALSE, message = FALSE, results = 'hide', fig.align='center'}
+truth_table_sub <- table(post_pred_sub$CO2_C, post_pred_sub$predicted_class)
+confusionMatrix(truth_table_sub)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis', header=FALSE, quiet = TRUE}
+truth_table_sub_ConfusionOutput <-
+  matrix(c(94, 3, 2, 6, 0, 0, 0, 0), nrow = 3, 
+         dimnames = list(c("Pred low", "Pred med", "Pred high"), 
+                         c("Reference low", "Reference med", "Reference high")))
+
+stargazer(
+  truth_table_sub_ConfusionOutput,
+  type = "latex",
+  no.space = TRUE,
+  report = ('vcsp*'),
+  single.row = FALSE,
+  header = FALSE,
+  column.sep.width = "0.2pt",
+  font.size = "small",
+  title = "Confusion Matrix - Predicting CO2 Level Classification"
+)
+```
+### Conclusion:
+
+Through this limited study, we were able to ultimately refute the conclusion presented by the IMF as we did not find an income bracket contributing more to the level of carbon emissions within a country than the other income brackets. While concluding this, we do note that our select and subsetted data analysis may lead to differing results and should be expanded to include more countries, more factors, and more models to see if our conclusion stands or gets closer to the one presented by IMF. As we assessed our prediction results, we were able to conclude that the high accuracy provides evidence that national income, national wealth, and population are good economic and demographic indicators for determining a nation’s carbon emissions.
+
+While our personal ambitions were to compose a comprehensive study, we know that limitations within our dataset, our model, and current available R packages lend to us falling short on our thoroughness. As detailed within the Methods section, we found that the income brackets within Question 1 were multicollinear, which in turn impacts the precision of our assessment/understanding of the coefficients for each income bracket. Additionally, it would be ideal to incorporate more descriptive country feature/statistics/information. These additional variables would provide more context to our model and allow for a better comparison to the work studied by IMF. In regard to Question 2, the variation amongst the low, medium, and high levels is not apparent. It would be best to understand if there is a better measure to define these levels to create distinct class, and thus variation amongst the levels. We also found that by testing our model on more countries by the number of countries within our training data (i.e. our initially selected 10 countries). As seen from the results titled within the Appendix, we tried to test on the same number but due to our sample size being small, the accuracy results were poor.
+
+To address these limitation, our future work would consist of the following:
+1.	Adding supplementary descriptive statistics/feature on a country. We would like to incorporate data on the government sector vs private sector as well as more information on personal wealth to better define the characteristics of each income bracket
+2.	Adding more countries with carbon emissions that were not represented within our model (i.e. extremely low carbon emission rates). These additional training countries would enable us to test our model on a larger test size.
+3.	Rather than just using mean, we would want to define variance based on a weighted average and use this information to define unique levels of carbon emissions. Currently, we have the 3 levels of carbon emissions, but this measure would possibly create more levels (i.e. extremely, low, medium, high, extremely high).
+
+
+
+
+## Appendix
+
+MODEL 1 IMPROVEMENTS
+
+Trial 1:Linear: CO2 = top 10 + middle 40 + bottom 50
+```{r, echo=FALSE}
+try1 <- lm(stacking_co2 ~ top10 + middle40 + bottom50, data=dataset_for_model1)
+summary(try1)
+```
+```{r, echo=FALSE}
+plot(try1)
+```
+
+
+Trial 2: Linear: CO2 = top 10 + middle 40 + bottom 50 + country
+
+```{r, echo=FALSE}
+try2 <- lm(stacking_co2 ~ top10 + middle40 + bottom50 + country_code, data=dataset_for_model1)
+summary(try2)
+```
+
+```{r, echo=FALSE}
+plot(try2)
+```
+
+Trial 3: Linear Mixed Model: CO2 = top 10 + middle 40 + bottom 40 + (1 | country)
+```{r, echo=FALSE}
+try3 <- lmer(stacking_co2 ~ top10 + middle40 + bottom50 + (1|country_code), data=dataset_for_model1)
+summary(try3)
+```
+```{r, echo=FALSE}
+plot(try3)
+```
+
+
+Try 4 - Linear Mixed Model: log(CO2) = top 10 + middle 40 + bottom 40 + (1 | country)
+```{r, echo=FALSE}
+try4 <- lmer(log(stacking_co2) ~ top10 + middle40 + bottom50 + (1|country_code), data=dataset_for_model1)
+summary(try4)
+```
+
+```{r, echo=FALSE}
+plot(try4)
+```
+
+MODEL 2 TESTING
+
+Testing Model with 10 countries: 
+```{r, echo=FALSE}
+mixclmod_predict <- data.frame(probs=predict(mixcl2, predict_model_df, type = "class"))
+mixclmod_predict <- mixclmod_predict %>% mutate(
+  predicted_class = case_when(probs<0.5 ~ "med",
+                    probs >= 0.5 ~ "low"))
+mixclmod_predict$predicted_class <- ordered(mixclmod_predict$predicted_class, levels = c("low", "med", "high"))
+```
+
+```{r, echo=FALSE}
+post_pred <- cbind(predict_model_df, mixclmod_predict)
+post_pred
+```
+
+```{r, echo=FALSE}
+truth_table <- table(post_pred$CO2_C, post_pred$predicted_class)
+confusionMatrix(truth_table)
+```
+
+$$ Log(CO_2) = \beta_{1}Top10 + \beta_{2}Middle40 + \beta_{3}Bottom50 + (1 | Country)$$
+
+$$ Y = X_i\beta + Z_ju + \epsilon$$
+
+$$ CO_2 = \beta_{1}Top10 + \beta_{2}Middle40 + \beta_{3}Bottom50 + (1 | Country)$$
+
+```{r, echo=FALSE}
+vif(mod1)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis', header=FALSE}
+stargazer(
+  vif(mod1),
+  type = "latex",
+  report = ("vc*p"),
+  title = "VIF Multi-Collinearity Check for Research Question 1: CO2 and Income Bracket Analysis",
+  header = FALSE,
+  single.row = TRUE,
+  column.sep.width = "0.5pt",
+  digits = 2
+)
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis', header=FALSE}
+multinomM2 <- polr(CO2_C ~ income_log + wealth_log + pop_log, data=m2_data1, Hess = TRUE)
+summary(multinomM2)
+brant(multinomM2)
+
+stargazer(
+  brant(multinomM2),
+  type = "latex",
+  report = ("vc*p"),
+  title = "Proportional Odds Assumption Check for Research Question 2: CO2 and Economic/Demographic Indicators Analysis",
+  header = FALSE,
+  single.row = TRUE,
+  column.sep.width = "0.5pt",
+  digits = 2
+)
+stargazer(
+  vif(mixcl),
+  type = "latex",
+  report = ("vc*p"),
+  title = "VIF Multi-Collinearity Check for Research Question 2: CO2 and Economic/Demographic Indicators Analysis",
+  header = FALSE,
+  single.row = TRUE,
+  column.sep.width = "0.5pt",
+  digits = 2
+)
+```
+
+$$ P(Y \le j) = \alpha_{j} + \beta_{1}Log(Income) + \beta_{2}Log(Wealth) + \beta_{3}Log(Population) + (1 | Country)$$
+
+$$ P(Y \le j) = \alpha_{j} + \beta_{1}(Income) + \beta_{2}(Wealth) + \beta_{3}(Population) + (1 | Country)$$
+
+$$ Y = \alpha_{j} - X_i\beta + Z_t~_[~_i~_]u_t + \epsilon$$
+
+```{r, echo=FALSE}
+mod1 <- lmer(log(stacking_co2) ~ top10 + middle40 + bottom50 + (1|country_code), data=dataset_for_model1)
+summary(mod1)
+```
+
+
+
+$$ Log(CO_2) = 126.37Top10 + 127.33Middle40 + 127.12Bottom50 - 117.10$$
+
+```{r, echo=FALSE}
+mixcl2 <- clmm2(CO2_C ~ income_log + wealth_log + pop_log, random = Country, data=m2_data1, Hess=TRUE)
+summary(mixcl2)
+```
+
+
+$$ Low = 297.41 + 1.16Log(Income) + 12.40Log(Wealth) + 7.60Log(Population) + 186.20$$
+
+```{r, echo=FALSE}
+plot(mod1)
+```
+
+
+```{r, echo=FALSE, results='hide', header=FALSE, message=FALSE, warning=FALSE, out.width = "50%", fig.align='center', quiet=TRUE}
+roc(
+  post_pred_sub$predicted_class,
+  post_pred_sub$CO2_C,
+  print.thres = 0.5,
+  print.auc = T,
+  plot = T,
+  legacy.axes = T,
+  quiet = TRUE
+)
+```
+
+\newpage
+
+## Appendix
+```{r, echo = FALSE, message = FALSE, results = 'hide', fig.align='center', fig.width=12, fig.height=8}
+# 4. GDP by Carbon Footprint (one graph per country (max 10))
+# Countries: United States, China, India, Germany, United Kingdom, Canada, Australia, 
+# Brazil, Nigeria, South Africa
+# colorblind-friendly palette: c("#88CCEE", "#CC6677", "#DDCC77", "#117733", "#332288", "#AA4499", "#44AA99", "#999933", "#6699CC", "#888888")
+graph4.1 <- ggplot(ten_countries)+ 
+  geom_point(aes(x = GDP_USA, y = CO2_USA, color = "USA")) +
+  scale_color_manual(values=c("#888888")) +
+    ggtitle("USA CO2 vs GDP")  + labs(x = "GDP", y = "CO2") + theme_bw()+ theme(legend.position="none")
+
+graph4.2 <- ggplot(ten_countries)+ 
+  geom_point(aes(x = GDP_China, y = CO2_China, color = "China")) +
+  scale_color_manual(values=c("#117733")) +
+    ggtitle("China CO2 vs GDP")  + labs(x = "GDP", y = "CO2") + theme_bw() + theme(legend.position="none")
+
+graph4.3 <- ggplot(ten_countries)+ 
+  geom_point(aes(x = GDP_India, y = CO2_India, color = "India")) +
+  scale_color_manual(values=c("#AA4499")) +
+    ggtitle("India CO2 vs GDP")  + labs(x = "GDP", y = "CO2") + theme_bw() + theme(legend.position="none")
+
+graph4.4 <- ggplot(ten_countries)+ 
+  geom_point(aes(x = GDP_Germany, y = CO2_Germany, color = "Germany")) +
+  scale_color_manual(values=c("#332288")) +
+    ggtitle("Germany CO2 vs GDP")  + labs(x = "GDP", y = "CO2") + theme_bw()+ theme(legend.position="none")
+
+graph4.5 <- ggplot(ten_countries)+ 
+  geom_point(aes(x = GDP_United_Kingdom, y = CO2_United_Kingdom, color = "UK")) +
+  scale_color_manual(values=c("#6699CC")) +
+    ggtitle("United Kingdom CO2 vs GDP")  + labs(x = "GDP", y = "CO2") + theme_bw()+ theme(legend.position="none")
+
+graph4.6 <- ggplot(ten_countries)+ 
+  geom_point(aes(x = GDP_Canada, y = CO2_Canada, color = "Canada")) +
+  scale_color_manual(values=c("#DDCC77")) +
+    ggtitle("Canada CO2 vs GDP")  + labs(x = "GDP", y = "CO2") + theme_bw() + theme(legend.position="none")
+
+graph4.7 <- ggplot(ten_countries)+ 
+  geom_point(aes(x = GDP_Australia, y = CO2_Australia, color = "Australia")) +
+  scale_color_manual(values=c("#88CCEE")) +
+    ggtitle("Australia CO2 vs GDP")  + labs(x = "GDP", y = "CO2") + theme_bw() + theme(legend.position="none")
+
+graph4.8 <- ggplot(ten_countries)+ 
+  geom_point(aes(x = GDP_Brazil, y = CO2_Brazil, color = "Brazil")) +
+  scale_color_manual(values=c("#CC6677")) +
+    ggtitle("Brazil CO2 vs GDP")  + labs(x = "GDP", y = "CO2") + theme_bw() + theme(legend.position="none")
+
+graph4.9 <- ggplot(ten_countries)+ 
+  geom_point(aes(x = GDP_Nigeria, y = CO2_Nigeria, color = "Nigeria")) +
+  scale_color_manual(values=c("#44AA99")) +
+    ggtitle("Nigeria CO2 vs GDP")  + labs(x = "GDP", y = "CO2") + theme_bw() + theme(legend.position="none")
+
+graph4.10 <- ggplot(ten_countries)+ 
+  geom_point(aes(x = GDP_South_Africa, y = CO2_South_Africa, color = "South_Africa")) +
+  scale_color_manual(values=c("#999933")) +
+    ggtitle("South Africa CO2 vs GDP")  + labs(x = "GDP", y = "CO2") + theme_bw() + theme(legend.position="none")
+
+plot_grid(graph4.1, graph4.2, graph4.3,graph4.4, graph4.5,graph4.6,graph4.7,graph4.8,graph4.9,graph4.10,nrow=3, ncol=4)
+```
+
+```{r, echo=FALSE, result = "hide"}
+#correlation matrix
+only_co2_ten_countries <- ten_countries[, c(4,7,10,13,16,19,22,25,28,31)]
+only_wealth_ten_countries <- wealth_ten_countries[, c(3,5,7,9,11,13,15,17,19,21)]
+co2_wealth_ten_countries <- cbind(only_co2_ten_countries, only_wealth_ten_countries)
+colnames(co2_wealth_ten_countries) <- c(
+  "co2_usa","co2_china","co2_india","co2_germany","co2_uk","co2_canada","co2_australia","co2_brazil","co2_nigira","co2_south africa", 
+  "wealth_usa","wealth_china","wealth_india","wealth_germany","wealth_uk","wealth_canada","wealth_australia","wealth_brazil","wealth_nigira","wealth_south africa")
+
+#corrplot(cor(co2_wealth_ten_countries), method  = "circle", type = "upper")
+#cor(co2_wealth_ten_countries)
+```
+
+![Correlation Matrix](image.png){width=75%}
+
+```{r, echo=FALSE}
+Anova(mod1)
+```
